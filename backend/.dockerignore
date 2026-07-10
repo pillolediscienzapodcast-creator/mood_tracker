@@ -1,0 +1,15 @@
+# Virtualenv host (mac): romperebbe il container Linux — MAI copiarlo.
+.venv/
+
+# Cache Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Segreti / locali (la config arriva da compose env_file)
+.env
+.env.*
+!.env.example
+
+# Varie
+.DS_Store

@@ -1,0 +1,72 @@
+services:
+  db:
+    # Immagine pinnata per digest (mai "latest").
+    image: postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
+    restart: unless-stopped
+    # Le credenziali derivano dalla stessa configurazione del backend
+    # (backend/.env -> vedi .env.example). I default qui presenti coincidono
+    # con .env.example, così `docker compose up` funziona senza alcun flag.
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      POSTGRES_DB: ${DATABASE_NAME:-startup_template}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-postgres} -d ${DATABASE_NAME:-startup_template}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    # Sorgente unica della configurazione: backend/.env (da .env.example).
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override: dentro Docker il DB si raggiunge col nome del servizio,
+      # non con localhost. pydantic-settings dà priorità alle env var di processo.
+      DATABASE_HOST: db
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    # Monto solo il sorgente (non l'intera cartella) per NON sovrascrivere
+    # il virtualenv Linux del container con la .venv dell'host.
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/alembic:/app/alembic
+    command:
+      ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    healthcheck:
+      # One-liner Python: nessun curl da installare nell'immagine.
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    environment:
+      # In Docker il proxy /api deve puntare al servizio backend, non a localhost.
+      VITE_PROXY_TARGET: http://backend:8000
+      VITE_USE_POLLING: "true"
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  pgdata:
