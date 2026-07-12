@@ -6,6 +6,11 @@ const routes: RouteRecordRaw[] = [
     name: 'home',
     component: () => import('@/views/HomeView.vue'),
   },
+  {
+    path: '/mood',
+    name: 'mood',
+    component: () => import('@/views/MoodTrackerView.vue'),
+  },
   // Aggiungere qui le pagine future (lazy-loaded).
 ]
 
